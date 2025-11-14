@@ -31,11 +31,11 @@ export class ClaimResponseDto {
   @ApiPropertyOptional()
   lastPolledAt?: Date;
 
-  @ApiProperty({ type: () => AppointmentResponseDto })
-  appointment!: AppointmentResponseDto;
+  @ApiPropertyOptional({ type: () => AppointmentResponseDto })
+  appointment?: AppointmentResponseDto;
 
-  @ApiProperty({ type: () => PatientResponseDto })
-  patient!: PatientResponseDto;
+  @ApiPropertyOptional({ type: () => PatientResponseDto })
+  patient?: PatientResponseDto;
 
   @ApiProperty()
   clinicId!: string;

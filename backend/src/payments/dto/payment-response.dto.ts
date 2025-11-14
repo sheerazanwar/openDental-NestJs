@@ -24,8 +24,8 @@ export class PaymentResponseDto {
   @ApiPropertyOptional()
   metadata?: Record<string, any>;
 
-  @ApiProperty({ type: () => ClaimResponseDto })
-  claim!: ClaimResponseDto;
+  @ApiPropertyOptional({ type: () => ClaimResponseDto })
+  claim?: ClaimResponseDto;
 
   @ApiProperty()
   clinicId!: string;

@@ -52,16 +52,17 @@ export class AuthService {
       userType: UserType.ADMIN,
       sessionId: session.id,
     };
-    const expiresIn = this.configService.get<string>('auth.jwtExpiresIn') ?? '1h';
+    const expiresInConfig = this.configService.get<string>('auth.jwtExpiresIn');
+    const expiresInSeconds = this.parseExpiresIn(expiresInConfig);
     const accessToken = await this.jwtService.signAsync(payload, {
-      expiresIn,
+      expiresIn: expiresInSeconds,
       secret: this.configService.get<string>('auth.jwtSecret'),
     });
 
     return {
       accessToken,
       sessionId: session.id,
-      expiresIn: this.parseExpiresIn(expiresIn),
+      expiresIn: expiresInSeconds,
       refreshToken,
     };
   }
@@ -89,16 +90,17 @@ export class AuthService {
       userType: UserType.ADMIN,
       sessionId: newSession.id,
     };
-    const expiresIn = this.configService.get<string>('auth.jwtExpiresIn') ?? '1h';
+    const expiresInConfig = this.configService.get<string>('auth.jwtExpiresIn');
+    const expiresInSeconds = this.parseExpiresIn(expiresInConfig);
     const accessToken = await this.jwtService.signAsync(payload, {
-      expiresIn,
+      expiresIn: expiresInSeconds,
       secret: this.configService.get<string>('auth.jwtSecret'),
     });
 
     return {
       accessToken,
       sessionId: newSession.id,
-      expiresIn: this.parseExpiresIn(expiresIn),
+      expiresIn: expiresInSeconds,
       refreshToken,
     };
   }
@@ -111,8 +113,11 @@ export class AuthService {
     return randomBytes(48).toString('hex');
   }
 
-  private parseExpiresIn(value: string): number {
-    const numeric = parseInt(value, 10);
+  private parseExpiresIn(value?: string): number {
+    if (!value) {
+      return 3600;
+    }
+    const numeric = Number(value);
     if (!Number.isNaN(numeric)) {
       return numeric;
     }

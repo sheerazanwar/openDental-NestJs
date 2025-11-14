@@ -2,7 +2,9 @@ import { Controller, Get, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AdminsService } from './admins.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { CurrentUser, AuthenticatedUser } from '../common/decorators/current-user.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../common/decorators/current-user.decorator';
+
 import { AdminResponseDto } from './dto/admin-response.dto';
 
 @ApiTags('Administrators')

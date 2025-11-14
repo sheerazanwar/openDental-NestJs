@@ -46,8 +46,9 @@ export class AppointmentResponseDto {
   @ApiPropertyOptional()
   providerName?: string;
 
-  @ApiProperty({ type: () => PatientResponseDto })
-  patient!: PatientResponseDto;
+  @ApiPropertyOptional({ type: () => PatientResponseDto })
+  patient?: PatientResponseDto;
+
 
   @ApiProperty()
   clinicId!: string;
