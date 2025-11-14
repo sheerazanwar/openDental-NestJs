@@ -49,6 +49,7 @@ export class AppointmentResponseDto {
   @ApiPropertyOptional({ type: () => PatientResponseDto })
   patient?: PatientResponseDto;
 
+
   @ApiProperty()
   clinicId!: string;
 
