@@ -1,0 +1,8 @@
+export enum ClaimStatus {
+  NOT_SUBMITTED = 'NOT_SUBMITTED',
+  SUBMITTED = 'SUBMITTED',
+  IN_REVIEW = 'IN_REVIEW',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+  PAID = 'PAID',
+}
