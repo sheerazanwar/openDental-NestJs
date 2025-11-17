@@ -36,7 +36,6 @@ const parseExpiresIn = (value?: string): number | undefined => {
   }
 };
 
-
 @Module({
   imports: [
     AdminsModule,
