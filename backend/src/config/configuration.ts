@@ -4,6 +4,8 @@ export interface AppConfig {
   database: {
     url: string;
     logging: boolean;
+    synchronize: boolean;
+    runMigrationsOnStart: boolean;
   };
   auth: {
     jwtSecret: string;
@@ -28,8 +30,20 @@ export default (): AppConfig => ({
   nodeEnv: process.env.NODE_ENV ?? 'development',
   port: parseInt(process.env.PORT ?? '3000', 10),
   database: {
-    url: process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/opendental',
+    url:
+      process.env.DATABASE_URL ??
+      ((process.env.NODE_ENV ?? 'development') === 'test'
+        ? 'postgres://postgres:postgres@localhost:5432/opendental_test'
+        : 'postgres://postgres:postgres@localhost:5432/opendental'),
     logging: (process.env.TYPEORM_LOGGING ?? 'false').toLowerCase() === 'true',
+    synchronize:
+      (process.env.TYPEORM_SYNCHRONIZE ??
+        ((process.env.NODE_ENV ?? 'development') === 'production' ? 'false' : 'true'))
+        .toLowerCase() === 'true',
+    runMigrationsOnStart:
+      (process.env.TYPEORM_RUN_MIGRATIONS_ON_START ??
+        ((process.env.NODE_ENV ?? 'development') === 'production' ? 'true' : 'false'))
+        .toLowerCase() === 'true',
   },
   auth: {
     jwtSecret: process.env.JWT_SECRET ?? 'change-me',

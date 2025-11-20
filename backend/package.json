@@ -11,12 +11,17 @@
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main.js",
+    "start:prod": "npm run build && npm run maybe:migrate:prod && node dist/main.js",
+    "start:prod:pm2": "npm run build && npm run maybe:migrate:prod && pm2-runtime ecosystem.config.js",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "migration:run": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d src/data-source.ts migration:run",
+    "migration:run:prod": "node ./node_modules/typeorm/cli.js -d dist/data-source.js migration:run",
+    "migration:generate": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d src/data-source.ts migration:generate src/migrations/auto-migration",
+    "maybe:migrate:prod": "node -e \"if ((process.env.TYPEORM_RUN_MIGRATIONS_ON_START ?? 'true').toLowerCase() === 'true') { require('child_process').execSync('node ./node_modules/typeorm/cli.js -d dist/data-source.js migration:run', {stdio: 'inherit'}); } else { console.log('Skipping migrations on start'); }\""
   },
   "dependencies": {
     "@nestjs/common": "^11.1.9",
@@ -35,6 +40,7 @@
     "express-session": "^1.18.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
+    "pm2": "^5.4.2",
     "pg": "^8.13.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",

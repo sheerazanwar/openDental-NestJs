@@ -21,6 +21,14 @@ class EnvironmentVariables {
   @IsString()
   TYPEORM_LOGGING?: string;
 
+  @IsOptional()
+  @IsString()
+  TYPEORM_SYNCHRONIZE?: string;
+
+  @IsOptional()
+  @IsString()
+  TYPEORM_RUN_MIGRATIONS_ON_START?: string;
+
   @IsString()
   JWT_SECRET: string = 'change-me';
 

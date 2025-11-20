@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { join } from 'path';
 import configuration from './config/configuration';
 import { validate } from './config/validation';
 import { Admin } from './admins/admin.entity';
@@ -37,23 +38,20 @@ import { PollingModule } from './polling/polling.module';
       inject: [ConfigService],
       useFactory: async (configService: ConfigService) => {
         const nodeEnv = configService.get<string>('nodeEnv');
+        const synchronize = configService.get<boolean>('database.synchronize');
+        const runMigrations = configService.get<boolean>('database.runMigrationsOnStart');
         const common = {
           entities: [Admin, Clinic, Patient, Appointment, Claim, Payment, Session, ActivityLog],
-          synchronize: true,
+          migrations: [join(__dirname, 'migrations/*.{ts,js}')],
         };
-        if (nodeEnv === 'test') {
-          return {
-            type: 'sqlite',
-            database: ':memory:',
-            dropSchema: true,
-            logging: false,
-            ...common,
-          } as const;
-        }
+        const isTest = nodeEnv === 'test';
         return {
           type: 'postgres',
           url: configService.get<string>('database.url'),
-          logging: configService.get<boolean>('database.logging'),
+          logging: isTest ? false : configService.get<boolean>('database.logging'),
+          synchronize: isTest ? true : synchronize,
+          migrationsRun: isTest ? false : runMigrations,
+          dropSchema: isTest,
           ...common,
         } as const;
       },

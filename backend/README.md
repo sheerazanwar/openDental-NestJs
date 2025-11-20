@@ -23,7 +23,7 @@ This NestJS service orchestrates clinic onboarding, patient eligibility verifica
 
 ## Architecture Overview
 - **NestJS Modular Design** – each business capability (auth, clinics, patients, appointments, claims, payments, sessions, activity logs, polling, integrations) is isolated into its own module with DTO-backed Swagger documentation.
-- **PostgreSQL + TypeORM** – production runs exclusively on PostgreSQL (configured through `DATABASE_URL`). Tests use transient SQLite to keep the suite fast without diverging entity behavior.
+- **PostgreSQL + TypeORM** – every environment (development, test, production) runs on PostgreSQL via `DATABASE_URL`; tests use a dedicated test database with schema drop between runs.
 - **Swagger First** – every controller method uses DTOs/enums annotated with `@nestjs/swagger` so consumers have precise schemas and response shapes at `/api/docs`.
 - **Robust Integrations** – `OpenDentalService` wraps the official REST API surface (patients, insurance, scheduling, procedures, claims, payments, ledger, utilities) and exposes ergonomic helpers for orchestrations and polling. `TemporalService` acts as an adapter for workflow scheduling.
 - **Auditability & Sessions** – mutations are intercepted to create `activity_logs` records and the auth module tracks refresh tokens in a dedicated `sessions` table for revocation.
@@ -62,6 +62,8 @@ cp .env.example .env
 | `PORT` | HTTP port (default `3000`) |
 | `DATABASE_URL` | PostgreSQL connection string (`postgres://user:pass@host:5432/db`) |
 | `TYPEORM_LOGGING` | `true`/`false` to toggle TypeORM SQL logging |
+| `TYPEORM_SYNCHRONIZE` | `true` in dev/test for rapid iteration; defaults to `false` in production |
+| `TYPEORM_RUN_MIGRATIONS_ON_START` | `true` in production by default to auto-apply migrations at boot |
 | `JWT_SECRET` | Secret used for signing access tokens |
 | `JWT_EXPIRES_IN` | Access token lifetime (`900s`, `1h`, etc.) |
 | `REFRESH_TOKEN_TTL_DAYS` | Number of days before a refresh session expires |
@@ -72,7 +74,9 @@ cp .env.example .env
 | `TEMPORAL_BASE_URL` | Temporal server base URL (optional) |
 | `TEMPORAL_NAMESPACE` | Temporal namespace (optional) |
 
-> **PostgreSQL usage:** The application always boots with a PostgreSQL `DATABASE_URL` and never falls back to SQLite outside of automated tests. Ensure the specified database exists and the user has privileges to create/update tables (TypeORM `synchronize=true` in development).
+> **PostgreSQL usage:** The application always boots with a PostgreSQL `DATABASE_URL` and never falls back to any other driver. Ensure the specified database exists and the user has privileges to create/update tables. Development defaults to `TYPEORM_SYNCHRONIZE=true`, while production relies on migrations and automatically runs them if `TYPEORM_RUN_MIGRATIONS_ON_START=true`. Tests expect a PostgreSQL database (default `opendental_test`) and drop the schema between runs.
+
+> **Idempotent migrations:** The initial migration checks for existing enums and tables before creating them, so pointing the service at a pre-provisioned database will not crash startup. Subsequent migrations should follow the same pattern when they need to tolerate partially provisioned environments.
 
 ## Local Development
 ```bash
@@ -84,11 +88,17 @@ Swagger UI becomes available at `http://localhost:3000/api/docs`, and all REST e
 ### Production Build
 ```bash
 npm run build
-npm run start:prod
+npm run start:prod   # runs migrations first (can be disabled with TYPEORM_RUN_MIGRATIONS_ON_START=false)
+npm run start:prod:pm2   # production-safe restart-on-crash runner (build + migrate + pm2 runtime)
 ```
 
 ## Database Management
-- TypeORM runs in **synchronized** mode by default for rapid iteration. Replace this with migrations before production hardening.
+- Development uses TypeORM synchronize for speed; production defaults to migrations. Set `TYPEORM_SYNCHRONIZE=false` and `TYPEORM_RUN_MIGRATIONS_ON_START=true` for hardened environments.
+- Apply migrations manually when needed:
+  - `npm run migration:run` (uses `src/data-source.ts` with TS runtime)
+- `npm run migration:run:prod` (uses compiled `dist/data-source.js`, invoked automatically by `npm run start:prod`)
+- `npm run start:prod:pm2` (wraps build + migrations in pm2 so the process auto-restarts on crash)
+  - `npm run migration:generate -- --name <DescriptiveName>` to scaffold new migrations from entities
 - PostgreSQL schema includes UUID primary keys, timestamp auditing columns, and JSONB metadata for eligibility, claims, and activity logging.
 - Polling workflows and session state persist directly in PostgreSQL so that restarts or horizontal scaling do not drop in-flight context.
 
@@ -99,6 +109,7 @@ npm run test       # unit tests (Jest)
 npm run test:e2e   # end-to-end tests using the shared bootstrap helper
 npm run test:cov   # coverage report
 ```
+- Tests require PostgreSQL. Set `NODE_ENV=test` and point `DATABASE_URL` to a disposable database (defaults to `postgres://postgres:postgres@localhost:5432/opendental_test`). The test configuration drops the schema automatically between runs, so you can reuse the same database container.
 
 ## OpenDental Integration
 `OpenDentalService` centralizes calls to the official REST API. Highlighted operations:
