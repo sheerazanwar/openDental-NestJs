@@ -94,6 +94,7 @@ npm run start:prod:pm2   # production-safe restart-on-crash runner (build + migr
 ```
 
 The pm2 runtime always executes the app in **cluster** mode, forking one worker per CPU by default (or the value of `CLUSTER_WORKERS`).
+Scheduled pollers use PostgreSQL advisory locks so only a single worker runs each cron task at a time, preventing duplicate database writes or notifications in clustered deployments.
 
 ## Database Management
 - Development uses TypeORM synchronize for speed; production defaults to migrations. Set `TYPEORM_SYNCHRONIZE=false` and `TYPEORM_RUN_MIGRATIONS_ON_START=true` for hardened environments.

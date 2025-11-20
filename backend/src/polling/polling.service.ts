@@ -14,6 +14,7 @@ import { ActivityLogService } from '../activity-log/activity-log.service';
 import { ActivityAction } from '../common/enums/activity-action.enum';
 import { UserType } from '../common/enums/user-type.enum';
 import { PaymentStatus } from '../common/enums/payment-status.enum';
+import { DistributedLockService } from '../common/distributed-lock.service';
 
 @Injectable()
 export class PollingService {
@@ -28,153 +29,176 @@ export class PollingService {
     private readonly paymentsService: PaymentsService,
     private readonly temporalService: TemporalService,
     private readonly activityService: ActivityLogService,
+    private readonly lockService: DistributedLockService,
   ) {}
 
   @Cron('0 */15 * * * *')
   async syncUpcomingAppointments(): Promise<void> {
-    const clinics = await this.clinicsService.findAll();
-    for (const clinic of clinics) {
-      const appointments = await this.openDentalService.fetchUpcomingAppointments(clinic.id);
-      for (const appointment of appointments) {
-        const patient = await this.patientsService.upsert(clinic.id, {
-          externalId: appointment.PatNum,
-          firstName: 'Unknown',
-          lastName: 'Patient',
-        });
-        await this.appointmentsService.upsert({
-          externalAptId: appointment.AptNum,
-          clinicId: clinic.id,
-          patientId: patient.id,
-          scheduledStart: new Date(appointment.AptDateTime).toISOString(),
-          scheduledEnd: new Date(new Date(appointment.AptDateTime).getTime() + appointment.AptLength * 60000).toISOString(),
-          status: this.mapAppointmentStatus(appointment.AptStatus),
-          notes: appointment.Note,
-          providerName: appointment.ProviderNum,
-        });
+    await this.lockService.withLock('polling:sync-upcoming-appointments', async () => {
+      const clinics = await this.clinicsService.findAll();
+      for (const clinic of clinics) {
+        const appointments = await this.openDentalService.fetchUpcomingAppointments(clinic.id);
+        for (const appointment of appointments) {
+          const patient = await this.patientsService.upsert(clinic.id, {
+            externalId: appointment.PatNum,
+            firstName: 'Unknown',
+            lastName: 'Patient',
+          });
+          await this.appointmentsService.upsert({
+            externalAptId: appointment.AptNum,
+            clinicId: clinic.id,
+            patientId: patient.id,
+            scheduledStart: new Date(appointment.AptDateTime).toISOString(),
+            scheduledEnd: new Date(new Date(appointment.AptDateTime).getTime() + appointment.AptLength * 60000).toISOString(),
+            status: this.mapAppointmentStatus(appointment.AptStatus),
+            notes: appointment.Note,
+            providerName: appointment.ProviderNum,
+          });
+        }
       }
-    }
+    });
   }
 
   @Cron('0 */5 * * * *')
   async syncTodaysAppointments(): Promise<void> {
-    const clinics = await this.clinicsService.findAll();
-    for (const clinic of clinics) {
-      const appointments = await this.openDentalService.fetchTodaysAppointments(clinic.id);
-      for (const appointment of appointments) {
-        const patient = await this.patientsService.upsert(clinic.id, {
-          externalId: appointment.PatNum,
-          firstName: 'Unknown',
-          lastName: 'Patient',
-        });
-        await this.appointmentsService.upsert({
-          externalAptId: appointment.AptNum,
-          clinicId: clinic.id,
-          patientId: patient.id,
-          scheduledStart: new Date(appointment.AptDateTime).toISOString(),
-          scheduledEnd: new Date(new Date(appointment.AptDateTime).getTime() + appointment.AptLength * 60000).toISOString(),
-          status: this.mapAppointmentStatus(appointment.AptStatus),
-          notes: appointment.Note,
-        });
+    await this.lockService.withLock('polling:sync-todays-appointments', async () => {
+      const clinics = await this.clinicsService.findAll();
+      for (const clinic of clinics) {
+        const appointments = await this.openDentalService.fetchTodaysAppointments(clinic.id);
+        for (const appointment of appointments) {
+          const patient = await this.patientsService.upsert(clinic.id, {
+            externalId: appointment.PatNum,
+            firstName: 'Unknown',
+            lastName: 'Patient',
+          });
+          await this.appointmentsService.upsert({
+            externalAptId: appointment.AptNum,
+            clinicId: clinic.id,
+            patientId: patient.id,
+            scheduledStart: new Date(appointment.AptDateTime).toISOString(),
+            scheduledEnd: new Date(new Date(appointment.AptDateTime).getTime() + appointment.AptLength * 60000).toISOString(),
+            status: this.mapAppointmentStatus(appointment.AptStatus),
+            notes: appointment.Note,
+          });
+        }
       }
-    }
+    });
   }
 
   @Cron('0 */10 * * * *')
   async syncCompletedAppointments(): Promise<void> {
-    const clinics = await this.clinicsService.findAll();
-    for (const clinic of clinics) {
-      const appointments = await this.openDentalService.fetchCompletedAppointments(clinic.id);
-      for (const appointment of appointments) {
-        const patient = await this.patientsService.upsert(clinic.id, {
-          externalId: appointment.PatNum,
-          firstName: 'Unknown',
-          lastName: 'Patient',
-        });
-        await this.appointmentsService.upsert({
-          externalAptId: appointment.AptNum,
-          clinicId: clinic.id,
-          patientId: patient.id,
-          scheduledStart: new Date(appointment.AptDateTime).toISOString(),
-          scheduledEnd: new Date(new Date(appointment.AptDateTime).getTime() + appointment.AptLength * 60000).toISOString(),
-          status: AppointmentStatus.COMPLETED,
-          notes: appointment.Note,
-        });
+    await this.lockService.withLock('polling:sync-completed-appointments', async () => {
+      const clinics = await this.clinicsService.findAll();
+      for (const clinic of clinics) {
+        const appointments = await this.openDentalService.fetchCompletedAppointments(clinic.id);
+        for (const appointment of appointments) {
+          const patient = await this.patientsService.upsert(clinic.id, {
+            externalId: appointment.PatNum,
+            firstName: 'Unknown',
+            lastName: 'Patient',
+          });
+          await this.appointmentsService.upsert({
+            externalAptId: appointment.AptNum,
+            clinicId: clinic.id,
+            patientId: patient.id,
+            scheduledStart: new Date(appointment.AptDateTime).toISOString(),
+            scheduledEnd: new Date(new Date(appointment.AptDateTime).getTime() + appointment.AptLength * 60000).toISOString(),
+            status: AppointmentStatus.COMPLETED,
+            notes: appointment.Note,
+          });
+        }
       }
-    }
+    });
   }
 
   @Cron('0 */30 * * * *')
   async syncEligibility(): Promise<void> {
-    const clinics = await this.clinicsService.findAll();
-    for (const clinic of clinics) {
-      const appointments = await this.appointmentsService.list(clinic.id);
-      for (const appointment of appointments.filter((apt) => apt.eligibilityStatus === EligibilityStatus.PENDING)) {
-        const eligibility = await this.openDentalService.checkEligibility(appointment.externalAptId);
-        if (eligibility.Eligible) {
-          await this.appointmentsService.updateEligibility(appointment.id, EligibilityStatus.APPROVED, eligibility as any);
-        } else {
-          await this.appointmentsService.updateEligibility(appointment.id, EligibilityStatus.REJECTED, eligibility as any);
+    await this.lockService.withLock('polling:sync-eligibility', async () => {
+      const clinics = await this.clinicsService.findAll();
+      for (const clinic of clinics) {
+        const appointments = await this.appointmentsService.list(clinic.id);
+        for (const appointment of appointments.filter((apt) => apt.eligibilityStatus === EligibilityStatus.PENDING)) {
+          const eligibility = await this.openDentalService.checkEligibility(appointment.externalAptId);
+          if (eligibility.Eligible) {
+            await this.appointmentsService.updateEligibility(
+              appointment.id,
+              EligibilityStatus.APPROVED,
+              eligibility as any,
+            );
+          } else {
+            await this.appointmentsService.updateEligibility(
+              appointment.id,
+              EligibilityStatus.REJECTED,
+              eligibility as any,
+            );
+          }
         }
       }
-    }
+    });
   }
 
   @Cron('0 0 * * * *')
   async syncClaims(): Promise<void> {
-    const clinics = await this.clinicsService.findAll();
-    for (const clinic of clinics) {
-      const claims = await this.claimsService.list(clinic.id);
-      for (const claim of claims.filter((clm) => clm.status !== ClaimStatus.PAID)) {
-        const status = await this.openDentalService.fetchClaimStatus(claim.externalClaimId);
-        if (status.Status === 'Received') {
-          await this.claimsService.update(claim.id, { status: ClaimStatus.SUBMITTED });
-        } else if (status.Status === 'Accepted') {
-          await this.claimsService.update(claim.id, { status: ClaimStatus.APPROVED });
-        } else if (status.Status === 'Rejected') {
-          await this.claimsService.update(claim.id, {
-            status: ClaimStatus.REJECTED,
-            rejectionReason: 'OpenDental rejection',
+    await this.lockService.withLock('polling:sync-claims', async () => {
+      const clinics = await this.clinicsService.findAll();
+      for (const clinic of clinics) {
+        const claims = await this.claimsService.list(clinic.id);
+        for (const claim of claims.filter((clm) => clm.status !== ClaimStatus.PAID)) {
+          const status = await this.openDentalService.fetchClaimStatus(claim.externalClaimId);
+          if (status.Status === 'Received') {
+            await this.claimsService.update(claim.id, { status: ClaimStatus.SUBMITTED });
+          } else if (status.Status === 'Accepted') {
+            await this.claimsService.update(claim.id, { status: ClaimStatus.APPROVED });
+          } else if (status.Status === 'Rejected') {
+            await this.claimsService.update(claim.id, {
+              status: ClaimStatus.REJECTED,
+              rejectionReason: 'OpenDental rejection',
+            });
+          }
+
+          await this.temporalService.enqueueJob({
+            workflow: 'ClaimStatusWorkflow',
+            payload: {
+              claimId: claim.id,
+              status: status.Status,
+            },
           });
         }
-
-        await this.temporalService.enqueueJob({
-          workflow: 'ClaimStatusWorkflow',
-          payload: {
-            claimId: claim.id,
-            status: status.Status,
-          },
-        });
       }
-    }
+    });
   }
 
   @Cron('0 15 * * * *')
   async syncPayments(): Promise<void> {
-    const clinics = await this.clinicsService.findAll();
-    for (const clinic of clinics) {
-      const claims = await this.claimsService.list(clinic.id);
-      for (const claim of claims.filter((clm) => clm.status === ClaimStatus.APPROVED)) {
-        const paymentPayload = await this.openDentalService.fetchClaimStatus(claim.externalClaimId);
-        if (paymentPayload.TotalFee) {
-          await this.paymentsService.upsert({
-            clinicId: clinic.id,
-            claimId: claim.id,
-            amount: paymentPayload.TotalFee,
-            status: PaymentStatus.PAID,
-          });
-          await this.claimsService.update(claim.id, { status: ClaimStatus.PAID });
+    await this.lockService.withLock('polling:sync-payments', async () => {
+      const clinics = await this.clinicsService.findAll();
+      for (const clinic of clinics) {
+        const claims = await this.claimsService.list(clinic.id);
+        for (const claim of claims.filter((clm) => clm.status === ClaimStatus.APPROVED)) {
+          const paymentPayload = await this.openDentalService.fetchClaimStatus(claim.externalClaimId);
+          if (paymentPayload.TotalFee) {
+            await this.paymentsService.upsert({
+              clinicId: clinic.id,
+              claimId: claim.id,
+              amount: paymentPayload.TotalFee,
+              status: PaymentStatus.PAID,
+            });
+            await this.claimsService.update(claim.id, { status: ClaimStatus.PAID });
+          }
         }
       }
-    }
+    });
   }
 
   @Cron('0 0 0 * * *')
   async logSystemHeartbeat(): Promise<void> {
-    await this.activityService.createLog({
-      userType: UserType.ADMIN,
-      userId: 'system',
-      action: ActivityAction.SYSTEM,
-      metadata: { message: 'Daily polling heartbeat' },
+    await this.lockService.withLock('polling:log-heartbeat', async () => {
+      await this.activityService.createLog({
+        userType: UserType.ADMIN,
+        userId: 'system',
+        action: ActivityAction.SYSTEM,
+        metadata: { message: 'Daily polling heartbeat' },
+      });
     });
   }
 
