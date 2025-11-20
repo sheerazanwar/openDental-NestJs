@@ -10,6 +10,9 @@ export class AdminResponseDto {
   @ApiProperty()
   fullName!: string;
 
+  @ApiProperty({ enum: ['ADMIN', 'SUPER_ADMIN'] })
+  role!: string;
+
   @ApiProperty()
   createdAt!: Date;
 

@@ -7,6 +7,8 @@ import { ClaimResponseDto } from './dto/claim-response.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { AppointmentResponseDto } from '../appointments/dto/appointment-response.dto';
 import { PatientResponseDto } from '../patients/dto/patient-response.dto';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../common/decorators/current-user.decorator';
 
 @ApiTags('Claims')
 @ApiBearerAuth()
@@ -18,8 +20,8 @@ export class ClaimsController {
   @Post()
   @ApiOperation({ summary: 'Create or update claim information received from OpenDental or AI pipeline' })
   @ApiOkResponse({ type: ClaimResponseDto })
-  async upsert(@Body() dto: CreateClaimDto) {
-    const claim = await this.claimsService.upsert(dto);
+  async upsert(@Body() dto: CreateClaimDto, @CurrentUser() user: AuthenticatedUser) {
+    const claim = await this.claimsService.upsert(dto, user);
     return this.toDto(claim);
   }
 
@@ -27,24 +29,24 @@ export class ClaimsController {
   @ApiOperation({ summary: 'List claims, optionally filtered by clinic' })
   @ApiQuery({ name: 'clinicId', required: false })
   @ApiOkResponse({ type: ClaimResponseDto, isArray: true })
-  async findAll(@Query('clinicId') clinicId?: string) {
-    const claims = await this.claimsService.list(clinicId);
+  async findAll(@Query('clinicId') clinicId: string | undefined, @CurrentUser() user: AuthenticatedUser) {
+    const claims = await this.claimsService.list(clinicId, user);
     return claims.map((claim) => this.toDto(claim));
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Retrieve claim details, including appointment and patient context' })
   @ApiOkResponse({ type: ClaimResponseDto })
-  async findOne(@Param('id') id: string) {
-    const claim = await this.claimsService.findOne(id);
+  async findOne(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    const claim = await this.claimsService.findOne(id, user);
     return this.toDto(claim);
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update claim status and metadata' })
   @ApiOkResponse({ type: ClaimResponseDto })
-  async update(@Param('id') id: string, @Body() dto: UpdateClaimDto) {
-    const claim = await this.claimsService.update(id, dto);
+  async update(@Param('id') id: string, @Body() dto: UpdateClaimDto, @CurrentUser() user: AuthenticatedUser) {
+    const claim = await this.claimsService.update(id, dto, user);
     return this.toDto(claim);
   }
 

@@ -1,4 +1,4 @@
-import { Between, Repository } from 'typeorm';
+import { Between, In, Repository } from 'typeorm';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Appointment } from './appointment.entity';
@@ -7,6 +7,7 @@ import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { ClinicsService } from '../clinics/clinics.service';
 import { PatientsService } from '../patients/patients.service';
 import { EligibilityStatus } from '../common/enums/eligibility-status.enum';
+import type { AuthenticatedUser } from '../common/decorators/current-user.decorator';
 
 @Injectable()
 export class AppointmentsService {
@@ -17,9 +18,9 @@ export class AppointmentsService {
     private readonly patientsService: PatientsService,
   ) {}
 
-  async upsert(dto: CreateAppointmentDto): Promise<Appointment> {
-    const clinic = await this.clinicsService.findOne(dto.clinicId);
-    const patient = await this.patientsService.findOne(dto.patientId);
+  async upsert(dto: CreateAppointmentDto, user?: AuthenticatedUser): Promise<Appointment> {
+    const clinic = await this.clinicsService.assertClinicAccess(dto.clinicId, user);
+    const patient = await this.patientsService.findOne(dto.patientId, user);
 
     let appointment = await this.repository.findOne({ where: { externalAptId: dto.externalAptId } });
     if (!appointment) {
@@ -52,10 +53,13 @@ export class AppointmentsService {
     return this.repository.save(appointment);
   }
 
-  async update(id: string, dto: UpdateAppointmentDto): Promise<Appointment> {
+  async update(id: string, dto: UpdateAppointmentDto, user?: AuthenticatedUser): Promise<Appointment> {
     const appointment = await this.repository.findOne({ where: { id }, relations: ['patient', 'clinic'] });
     if (!appointment) {
       throw new NotFoundException('Appointment not found');
+    }
+    if (user) {
+      await this.clinicsService.assertClinicAccess(appointment.clinic.id, user);
     }
 
     Object.assign(appointment, {
@@ -89,17 +93,24 @@ export class AppointmentsService {
     });
   }
 
-  async findOne(id: string): Promise<Appointment> {
+  async findOne(id: string, user?: AuthenticatedUser): Promise<Appointment> {
     const appointment = await this.repository.findOne({ where: { id }, relations: ['patient', 'clinic'] });
     if (!appointment) {
       throw new NotFoundException('Appointment not found');
     }
+    if (user) {
+      await this.clinicsService.assertClinicAccess(appointment.clinic.id, user);
+    }
     return appointment;
   }
 
-  async list(clinicId?: string): Promise<Appointment[]> {
+  async list(clinicId?: string, user?: AuthenticatedUser): Promise<Appointment[]> {
+    const clinicIds = await this.clinicsService.getAccessibleClinicIds(user, clinicId);
+    if (!clinicIds.length) {
+      return [];
+    }
     return this.repository.find({
-      where: clinicId ? { clinic: { id: clinicId } } : {},
+      where: { clinic: { id: In(clinicIds) } },
       relations: ['patient', 'clinic'],
       order: { scheduledStart: 'DESC' },
     });

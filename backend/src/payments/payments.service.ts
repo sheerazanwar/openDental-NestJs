@@ -1,12 +1,13 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Payment } from './payment.entity';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { ClinicsService } from '../clinics/clinics.service';
 import { ClaimsService } from '../claims/claims.service';
 import { PaymentStatus } from '../common/enums/payment-status.enum';
+import type { AuthenticatedUser } from '../common/decorators/current-user.decorator';
 
 @Injectable()
 export class PaymentsService {
@@ -17,9 +18,9 @@ export class PaymentsService {
     private readonly claimsService: ClaimsService,
   ) {}
 
-  async upsert(dto: CreatePaymentDto): Promise<Payment> {
-    const clinic = await this.clinicsService.findOne(dto.clinicId);
-    const claim = await this.claimsService.findOne(dto.claimId);
+  async upsert(dto: CreatePaymentDto, user?: AuthenticatedUser): Promise<Payment> {
+    const clinic = await this.clinicsService.assertClinicAccess(dto.clinicId, user);
+    const claim = await this.claimsService.findOne(dto.claimId, user);
 
     let payment = await this.repository.findOne({ where: { claim: { id: claim.id } }, relations: ['claim'] });
     if (!payment) {
@@ -45,26 +46,36 @@ export class PaymentsService {
     return this.repository.save(payment);
   }
 
-  async update(id: string, dto: UpdatePaymentDto): Promise<Payment> {
+  async update(id: string, dto: UpdatePaymentDto, user?: AuthenticatedUser): Promise<Payment> {
     const payment = await this.repository.findOne({ where: { id }, relations: ['clinic', 'claim'] });
     if (!payment) {
       throw new NotFoundException('Payment not found');
+    }
+    if (user) {
+      await this.clinicsService.assertClinicAccess(payment.clinic.id, user);
     }
     Object.assign(payment, dto);
     return this.repository.save(payment);
   }
 
-  async findOne(id: string): Promise<Payment> {
+  async findOne(id: string, user?: AuthenticatedUser): Promise<Payment> {
     const payment = await this.repository.findOne({ where: { id }, relations: ['clinic', 'claim'] });
     if (!payment) {
       throw new NotFoundException('Payment not found');
     }
+    if (user) {
+      await this.clinicsService.assertClinicAccess(payment.clinic.id, user);
+    }
     return payment;
   }
 
-  async list(clinicId?: string): Promise<Payment[]> {
+  async list(clinicId?: string, user?: AuthenticatedUser): Promise<Payment[]> {
+    const clinicIds = await this.clinicsService.getAccessibleClinicIds(user, clinicId);
+    if (!clinicIds.length) {
+      return [];
+    }
     return this.repository.find({
-      where: clinicId ? { clinic: { id: clinicId } } : {},
+      where: { clinic: { id: In(clinicIds) } },
       relations: ['clinic', 'claim'],
       order: { createdAt: 'DESC' },
     });

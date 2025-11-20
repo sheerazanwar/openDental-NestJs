@@ -10,6 +10,7 @@ import { OpenDentalModule } from '../integrations/opendental/opendental.module';
 import { TemporalModule } from '../integrations/temporal/temporal.module';
 import { ActivityLogModule } from '../activity-log/activity-log.module';
 import { DistributedLockService } from '../common/distributed-lock.service';
+import { AdminsModule } from '../admins/admins.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { DistributedLockService } from '../common/distributed-lock.service';
     OpenDentalModule,
     TemporalModule,
     ActivityLogModule,
+    AdminsModule,
   ],
   providers: [PollingService, DistributedLockService],
 })

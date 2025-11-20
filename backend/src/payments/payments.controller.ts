@@ -6,6 +6,8 @@ import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { PaymentResponseDto } from './dto/payment-response.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { ClaimResponseDto } from '../claims/dto/claim-response.dto';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../common/decorators/current-user.decorator';
 
 @ApiTags('Payments')
 @ApiBearerAuth()
@@ -17,8 +19,8 @@ export class PaymentsController {
   @Post()
   @ApiOperation({ summary: 'Create or update payment information from OpenDental claim payments feed' })
   @ApiOkResponse({ type: PaymentResponseDto })
-  async upsert(@Body() dto: CreatePaymentDto) {
-    const payment = await this.paymentsService.upsert(dto);
+  async upsert(@Body() dto: CreatePaymentDto, @CurrentUser() user: AuthenticatedUser) {
+    const payment = await this.paymentsService.upsert(dto, user);
     return this.toDto(payment);
   }
 
@@ -26,24 +28,24 @@ export class PaymentsController {
   @ApiOperation({ summary: 'List payments, optionally filtered by clinic' })
   @ApiQuery({ name: 'clinicId', required: false })
   @ApiOkResponse({ type: PaymentResponseDto, isArray: true })
-  async findAll(@Query('clinicId') clinicId?: string) {
-    const payments = await this.paymentsService.list(clinicId);
+  async findAll(@Query('clinicId') clinicId: string | undefined, @CurrentUser() user: AuthenticatedUser) {
+    const payments = await this.paymentsService.list(clinicId, user);
     return payments.map((payment) => this.toDto(payment));
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Retrieve payment details including associated claim' })
   @ApiOkResponse({ type: PaymentResponseDto })
-  async findOne(@Param('id') id: string) {
-    const payment = await this.paymentsService.findOne(id);
+  async findOne(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    const payment = await this.paymentsService.findOne(id, user);
     return this.toDto(payment);
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update payment metadata and reconciliation status' })
   @ApiOkResponse({ type: PaymentResponseDto })
-  async update(@Param('id') id: string, @Body() dto: UpdatePaymentDto) {
-    const payment = await this.paymentsService.update(id, dto);
+  async update(@Param('id') id: string, @Body() dto: UpdatePaymentDto, @CurrentUser() user: AuthenticatedUser) {
+    const payment = await this.paymentsService.update(id, dto, user);
     return this.toDto(payment);
   }
 
