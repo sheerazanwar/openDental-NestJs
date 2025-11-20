@@ -51,6 +51,7 @@ export class AuthService {
       email: admin.email,
       userType: UserType.ADMIN,
       sessionId: session.id,
+      role: admin.role,
     };
     const expiresInConfig = this.configService.get<string>('auth.jwtExpiresIn');
     const expiresInSeconds = this.parseExpiresIn(expiresInConfig);
@@ -89,6 +90,7 @@ export class AuthService {
       email: admin.email,
       userType: UserType.ADMIN,
       sessionId: newSession.id,
+      role: admin.role,
     };
     const expiresInConfig = this.configService.get<string>('auth.jwtExpiresIn');
     const expiresInSeconds = this.parseExpiresIn(expiresInConfig);

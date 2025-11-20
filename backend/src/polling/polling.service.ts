@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { ClinicsService } from '../clinics/clinics.service';
 import { OpenDentalService } from '../integrations/opendental/opendental.service';
 import { PatientsService } from '../patients/patients.service';
 import { AppointmentsService } from '../appointments/appointments.service';
@@ -15,13 +14,14 @@ import { ActivityAction } from '../common/enums/activity-action.enum';
 import { UserType } from '../common/enums/user-type.enum';
 import { PaymentStatus } from '../common/enums/payment-status.enum';
 import { DistributedLockService } from '../common/distributed-lock.service';
+import { AdminsService } from '../admins/admins.service';
+import { Clinic } from '../clinics/clinic.entity';
 
 @Injectable()
 export class PollingService {
   private readonly logger = new Logger(PollingService.name);
 
   constructor(
-    private readonly clinicsService: ClinicsService,
     private readonly openDentalService: OpenDentalService,
     private readonly patientsService: PatientsService,
     private readonly appointmentsService: AppointmentsService,
@@ -30,12 +30,18 @@ export class PollingService {
     private readonly temporalService: TemporalService,
     private readonly activityService: ActivityLogService,
     private readonly lockService: DistributedLockService,
+    private readonly adminsService: AdminsService,
   ) {}
+
+  private async getClinicsGroupedByAdmins(): Promise<Clinic[]> {
+    const admins = await this.adminsService.listWithClinics();
+    return admins.flatMap((admin) => admin.clinics ?? []);
+  }
 
   @Cron('0 */15 * * * *')
   async syncUpcomingAppointments(): Promise<void> {
     await this.lockService.withLock('polling:sync-upcoming-appointments', async () => {
-      const clinics = await this.clinicsService.findAll();
+      const clinics = await this.getClinicsGroupedByAdmins();
       for (const clinic of clinics) {
         const appointments = await this.openDentalService.fetchUpcomingAppointments(clinic.id);
         for (const appointment of appointments) {
@@ -62,7 +68,7 @@ export class PollingService {
   @Cron('0 */5 * * * *')
   async syncTodaysAppointments(): Promise<void> {
     await this.lockService.withLock('polling:sync-todays-appointments', async () => {
-      const clinics = await this.clinicsService.findAll();
+      const clinics = await this.getClinicsGroupedByAdmins();
       for (const clinic of clinics) {
         const appointments = await this.openDentalService.fetchTodaysAppointments(clinic.id);
         for (const appointment of appointments) {
@@ -88,7 +94,7 @@ export class PollingService {
   @Cron('0 */10 * * * *')
   async syncCompletedAppointments(): Promise<void> {
     await this.lockService.withLock('polling:sync-completed-appointments', async () => {
-      const clinics = await this.clinicsService.findAll();
+      const clinics = await this.getClinicsGroupedByAdmins();
       for (const clinic of clinics) {
         const appointments = await this.openDentalService.fetchCompletedAppointments(clinic.id);
         for (const appointment of appointments) {
@@ -114,7 +120,7 @@ export class PollingService {
   @Cron('0 */30 * * * *')
   async syncEligibility(): Promise<void> {
     await this.lockService.withLock('polling:sync-eligibility', async () => {
-      const clinics = await this.clinicsService.findAll();
+      const clinics = await this.getClinicsGroupedByAdmins();
       for (const clinic of clinics) {
         const appointments = await this.appointmentsService.list(clinic.id);
         for (const appointment of appointments.filter((apt) => apt.eligibilityStatus === EligibilityStatus.PENDING)) {
@@ -140,7 +146,7 @@ export class PollingService {
   @Cron('0 0 * * * *')
   async syncClaims(): Promise<void> {
     await this.lockService.withLock('polling:sync-claims', async () => {
-      const clinics = await this.clinicsService.findAll();
+      const clinics = await this.getClinicsGroupedByAdmins();
       for (const clinic of clinics) {
         const claims = await this.claimsService.list(clinic.id);
         for (const claim of claims.filter((clm) => clm.status !== ClaimStatus.PAID)) {
@@ -171,7 +177,7 @@ export class PollingService {
   @Cron('0 15 * * * *')
   async syncPayments(): Promise<void> {
     await this.lockService.withLock('polling:sync-payments', async () => {
-      const clinics = await this.clinicsService.findAll();
+      const clinics = await this.getClinicsGroupedByAdmins();
       for (const clinic of clinics) {
         const claims = await this.claimsService.list(clinic.id);
         for (const claim of claims.filter((clm) => clm.status === ClaimStatus.APPROVED)) {
