@@ -1,6 +1,8 @@
 import 'reflect-metadata';
 import { join } from 'path';
-import { DataSource } from 'typeorm';
+import { DataSource, DataSourceOptions } from 'typeorm';
+import { PostgresConnectionOptions } from 'typeorm/driver/postgres/PostgresConnectionOptions';
+import { SqliteConnectionOptions } from 'typeorm/driver/sqlite/SqliteConnectionOptions';
 import configuration from './config/configuration';
 import { Admin } from './admins/admin.entity';
 import { Clinic } from './clinics/clinic.entity';
@@ -22,14 +24,28 @@ const runMigrationsFlag = (process.env.TYPEORM_RUN_MIGRATIONS_ON_START ?? `${con
   .toLowerCase()
   .trim() === 'true';
 
-export default new DataSource({
-  type: isTest ? 'sqlite' : 'postgres',
-  database: isTest ? ':memory:' : undefined,
-  url: isTest ? undefined : config.database.url,
+const common = {
   logging: config.database.logging,
-  synchronize: synchronizeFlag,
-  migrationsRun: runMigrationsFlag,
-  dropSchema: isTest,
   entities: [Admin, Clinic, Patient, Appointment, Claim, Payment, Session, ActivityLog],
   migrations: [join(__dirname, 'migrations/*.{ts,js}')],
-});
+};
+
+const dataSourceOptions: DataSourceOptions = isTest
+  ? ({
+      type: 'sqlite',
+      database: ':memory:',
+      synchronize: true,
+      migrationsRun: false,
+      dropSchema: true,
+      ...common,
+    } satisfies SqliteConnectionOptions)
+  : ({
+      type: 'postgres',
+      url: config.database.url,
+      synchronize: synchronizeFlag,
+      migrationsRun: runMigrationsFlag,
+      dropSchema: false,
+      ...common,
+    } satisfies PostgresConnectionOptions);
+
+export default new DataSource(dataSourceOptions);
