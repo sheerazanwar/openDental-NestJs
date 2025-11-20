@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Admin } from './admin.entity';
@@ -28,6 +33,23 @@ export class AdminsService {
       fullName: input.fullName,
       passwordHash,
       role,
+    });
+
+    return this.repository.save(admin);
+  }
+
+  async createSuperAdmin(input: AdminRegisterDto): Promise<Admin> {
+    const existing = await this.repository.findOne({ where: { email: input.email } });
+    if (existing) {
+      throw new ConflictException('Administrator already exists');
+    }
+
+    const passwordHash = await bcrypt.hash(input.password, 12);
+    const admin = this.repository.create({
+      email: input.email.toLowerCase(),
+      fullName: input.fullName,
+      passwordHash,
+      role: AdminRole.SUPER_ADMIN,
     });
 
     return this.repository.save(admin);
