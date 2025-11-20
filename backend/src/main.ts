@@ -17,6 +17,10 @@ async function bootstrap() {
       cluster.fork();
     }
 
+    cluster.on('online', (worker) => {
+      console.log(`Worker ${worker.process.pid} is online`);
+    });
+
     cluster.on('exit', (worker, code, signal) => {
       console.warn(
         `Worker ${worker.process.pid} exited with code ${code} (${signal ?? 'no signal'}). Restarting...`,
