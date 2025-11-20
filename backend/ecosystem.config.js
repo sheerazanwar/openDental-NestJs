@@ -13,7 +13,6 @@ module.exports = {
       max_memory_restart: '512M',
       env: {
         NODE_ENV: 'production',
-        CLUSTER_ENABLED: 'true',
         ...(Number.isNaN(workerCount) || workerCount <= 0
           ? {}
           : { CLUSTER_WORKERS: workerCount.toString() }),

@@ -36,10 +36,7 @@ export default (): AppConfig => ({
   nodeEnv: process.env.NODE_ENV ?? 'development',
   port: parseInt(process.env.PORT ?? '3000', 10),
   cluster: {
-    enabled:
-      (process.env.CLUSTER_ENABLED ??
-        ((process.env.NODE_ENV ?? 'development') === 'production' ? 'true' : 'false'))
-        .toLowerCase() === 'true',
+    enabled: true,
     workers: Math.max(
       parseInt(process.env.CLUSTER_WORKERS ?? `${cpus().length}`, 10) || cpus().length,
       1,

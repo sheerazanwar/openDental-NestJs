@@ -60,8 +60,7 @@ cp .env.example .env
 | --- | --- |
 | `NODE_ENV` | `development`, `production`, or `test` |
 | `PORT` | HTTP port (default `3000`) |
-| `CLUSTER_ENABLED` | `true` to fork clustered workers (defaults to `true` in production, `false` otherwise) |
-| `CLUSTER_WORKERS` | Number of worker processes when clustering (defaults to CPU count) |
+| `CLUSTER_WORKERS` | Number of worker processes (defaults to CPU count across all environments) |
 | `DATABASE_URL` | PostgreSQL connection string (`postgres://user:pass@host:5432/db`) |
 | `TYPEORM_LOGGING` | `true`/`false` to toggle TypeORM SQL logging |
 | `TYPEORM_SYNCHRONIZE` | `true` in dev/test for rapid iteration; defaults to `false` in production |
@@ -94,8 +93,7 @@ npm run start:prod   # runs migrations first (can be disabled with TYPEORM_RUN_M
 npm run start:prod:pm2   # production-safe restart-on-crash runner (build + migrate + pm2 runtime)
 ```
 
-The pm2 runtime executes the app in **cluster** mode by default, forking one worker per CPU (or the value of `CLUSTER_WORKERS`).
-Override `CLUSTER_ENABLED=false` to force a single process when debugging production issues.
+The pm2 runtime always executes the app in **cluster** mode, forking one worker per CPU by default (or the value of `CLUSTER_WORKERS`).
 
 ## Database Management
 - Development uses TypeORM synchronize for speed; production defaults to migrations. Set `TYPEORM_SYNCHRONIZE=false` and `TYPEORM_RUN_MIGRATIONS_ON_START=true` for hardened environments.
