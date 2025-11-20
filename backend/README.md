@@ -23,7 +23,7 @@ This NestJS service orchestrates clinic onboarding, patient eligibility verifica
 
 ## Architecture Overview
 - **NestJS Modular Design** – each business capability (auth, clinics, patients, appointments, claims, payments, sessions, activity logs, polling, integrations) is isolated into its own module with DTO-backed Swagger documentation.
-- **PostgreSQL + TypeORM** – production runs exclusively on PostgreSQL (configured through `DATABASE_URL`). Tests use transient SQLite to keep the suite fast without diverging entity behavior.
+- **PostgreSQL + TypeORM** – every environment (development, test, production) runs on PostgreSQL via `DATABASE_URL`; tests use a dedicated test database with schema drop between runs.
 - **Swagger First** – every controller method uses DTOs/enums annotated with `@nestjs/swagger` so consumers have precise schemas and response shapes at `/api/docs`.
 - **Robust Integrations** – `OpenDentalService` wraps the official REST API surface (patients, insurance, scheduling, procedures, claims, payments, ledger, utilities) and exposes ergonomic helpers for orchestrations and polling. `TemporalService` acts as an adapter for workflow scheduling.
 - **Auditability & Sessions** – mutations are intercepted to create `activity_logs` records and the auth module tracks refresh tokens in a dedicated `sessions` table for revocation.
@@ -74,7 +74,7 @@ cp .env.example .env
 | `TEMPORAL_BASE_URL` | Temporal server base URL (optional) |
 | `TEMPORAL_NAMESPACE` | Temporal namespace (optional) |
 
-> **PostgreSQL usage:** The application always boots with a PostgreSQL `DATABASE_URL` and never falls back to SQLite outside of automated tests. Ensure the specified database exists and the user has privileges to create/update tables. Development defaults to `TYPEORM_SYNCHRONIZE=true`, while production relies on migrations and automatically runs them if `TYPEORM_RUN_MIGRATIONS_ON_START=true`.
+> **PostgreSQL usage:** The application always boots with a PostgreSQL `DATABASE_URL` and never falls back to any other driver. Ensure the specified database exists and the user has privileges to create/update tables. Development defaults to `TYPEORM_SYNCHRONIZE=true`, while production relies on migrations and automatically runs them if `TYPEORM_RUN_MIGRATIONS_ON_START=true`. Tests expect a PostgreSQL database (default `opendental_test`) and drop the schema between runs.
 
 ## Local Development
 ```bash
@@ -105,6 +105,7 @@ npm run test       # unit tests (Jest)
 npm run test:e2e   # end-to-end tests using the shared bootstrap helper
 npm run test:cov   # coverage report
 ```
+- Tests require PostgreSQL. Set `NODE_ENV=test` and point `DATABASE_URL` to a disposable database (defaults to `postgres://postgres:postgres@localhost:5432/opendental_test`). The test configuration drops the schema automatically between runs, so you can reuse the same database container.
 
 ## OpenDental Integration
 `OpenDentalService` centralizes calls to the official REST API. Highlighted operations:

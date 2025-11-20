@@ -44,23 +44,14 @@ import { PollingModule } from './polling/polling.module';
           entities: [Admin, Clinic, Patient, Appointment, Claim, Payment, Session, ActivityLog],
           migrations: [join(__dirname, 'migrations/*.{ts,js}')],
         };
-        if (nodeEnv === 'test') {
-          return {
-            type: 'sqlite',
-            database: ':memory:',
-            dropSchema: true,
-            logging: false,
-            synchronize: true,
-            migrationsRun: false,
-            ...common,
-          } as const;
-        }
+        const isTest = nodeEnv === 'test';
         return {
           type: 'postgres',
           url: configService.get<string>('database.url'),
-          logging: configService.get<boolean>('database.logging'),
-          synchronize,
-          migrationsRun: runMigrations,
+          logging: isTest ? false : configService.get<boolean>('database.logging'),
+          synchronize: isTest ? true : synchronize,
+          migrationsRun: isTest ? false : runMigrations,
+          dropSchema: isTest,
           ...common,
         } as const;
       },
