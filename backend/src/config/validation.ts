@@ -61,6 +61,14 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   TEMPORAL_NAMESPACE?: string;
+
+  @IsOptional()
+  @IsString()
+  CLUSTER_ENABLED?: string;
+
+  @IsOptional()
+  @IsNumber()
+  CLUSTER_WORKERS?: number;
 }
 
 export function validate(config: Record<string, unknown>) {
