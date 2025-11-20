@@ -9,6 +9,7 @@ import { PaymentsModule } from '../payments/payments.module';
 import { OpenDentalModule } from '../integrations/opendental/opendental.module';
 import { TemporalModule } from '../integrations/temporal/temporal.module';
 import { ActivityLogModule } from '../activity-log/activity-log.module';
+import { DistributedLockService } from '../common/distributed-lock.service';
 
 @Module({
   imports: [
@@ -22,6 +23,6 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     TemporalModule,
     ActivityLogModule,
   ],
-  providers: [PollingService],
+  providers: [PollingService, DistributedLockService],
 })
 export class PollingModule {}

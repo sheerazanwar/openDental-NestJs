@@ -1,6 +1,12 @@
+import { cpus } from 'node:os';
+
 export interface AppConfig {
   nodeEnv: string;
   port: number;
+  cluster: {
+    enabled: boolean;
+    workers: number;
+  };
   database: {
     url: string;
     logging: boolean;
@@ -29,6 +35,13 @@ export interface AppConfig {
 export default (): AppConfig => ({
   nodeEnv: process.env.NODE_ENV ?? 'development',
   port: parseInt(process.env.PORT ?? '3000', 10),
+  cluster: {
+    enabled: true,
+    workers: Math.max(
+      parseInt(process.env.CLUSTER_WORKERS ?? `${cpus().length}`, 10) || cpus().length,
+      1,
+    ),
+  },
   database: {
     url:
       process.env.DATABASE_URL ??
