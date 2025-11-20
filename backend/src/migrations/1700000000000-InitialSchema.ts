@@ -4,25 +4,46 @@ export class InitialSchema1700000000000 implements MigrationInterface {
   name = 'InitialSchema1700000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
+    const ensureEnum = async (name: string, definitionSql: string) => {
+      const existing = await queryRunner.query(
+        `SELECT 1 FROM pg_type WHERE typname = '${name.replace(/'/g, "''")}'`,
+      );
+      if (!existing.length) {
+        await queryRunner.query(definitionSql);
+      }
+    };
+
+    const ensureTable = async (table: Table) => {
+      const exists = await queryRunner.hasTable(table.name);
+      if (!exists) {
+        await queryRunner.createTable(table);
+      }
+    };
+
     await queryRunner.query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"');
-    await queryRunner.query(
+    await ensureEnum(
+      'appointment_status_enum',
       "CREATE TYPE \"appointment_status_enum\" AS ENUM('SCHEDULED','CONFIRMED','CHECKED_IN','COMPLETED','CANCELLED','NO_SHOW')",
     );
-    await queryRunner.query(
+    await ensureEnum(
+      'eligibility_status_enum',
       "CREATE TYPE \"eligibility_status_enum\" AS ENUM('PENDING','APPROVED','REJECTED')",
     );
-    await queryRunner.query(
+    await ensureEnum(
+      'claim_status_enum',
       "CREATE TYPE \"claim_status_enum\" AS ENUM('NOT_SUBMITTED','SUBMITTED','IN_REVIEW','APPROVED','REJECTED','PAID')",
     );
-    await queryRunner.query(
+    await ensureEnum(
+      'payment_status_enum',
       "CREATE TYPE \"payment_status_enum\" AS ENUM('PENDING','PARTIALLY_PAID','PAID','FAILED')",
     );
-    await queryRunner.query("CREATE TYPE \"user_type_enum\" AS ENUM('ADMIN','CLINIC')");
-    await queryRunner.query(
+    await ensureEnum('user_type_enum', "CREATE TYPE \"user_type_enum\" AS ENUM('ADMIN','CLINIC')");
+    await ensureEnum(
+      'activity_action_enum',
       "CREATE TYPE \"activity_action_enum\" AS ENUM('LOGIN','LOGOUT','CREATE','UPDATE','DELETE','POLL','SYSTEM')",
     );
 
-    await queryRunner.createTable(
+    await ensureTable(
       new Table({
         name: 'admins',
         columns: [
@@ -65,7 +86,7 @@ export class InitialSchema1700000000000 implements MigrationInterface {
       }),
     );
 
-    await queryRunner.createTable(
+    await ensureTable(
       new Table({
         name: 'clinics',
         columns: [
@@ -112,7 +133,7 @@ export class InitialSchema1700000000000 implements MigrationInterface {
       }),
     );
 
-    await queryRunner.createTable(
+    await ensureTable(
       new Table({
         name: 'patients',
         columns: [
@@ -139,7 +160,7 @@ export class InitialSchema1700000000000 implements MigrationInterface {
       }),
     );
 
-    await queryRunner.createTable(
+    await ensureTable(
       new Table({
         name: 'appointments',
         columns: [
@@ -189,7 +210,7 @@ export class InitialSchema1700000000000 implements MigrationInterface {
       }),
     );
 
-    await queryRunner.createTable(
+    await ensureTable(
       new Table({
         name: 'claims',
         columns: [
@@ -228,7 +249,7 @@ export class InitialSchema1700000000000 implements MigrationInterface {
       }),
     );
 
-    await queryRunner.createTable(
+    await ensureTable(
       new Table({
         name: 'payments',
         columns: [
@@ -263,7 +284,7 @@ export class InitialSchema1700000000000 implements MigrationInterface {
       }),
     );
 
-    await queryRunner.createTable(
+    await ensureTable(
       new Table({
         name: 'sessions',
         columns: [
@@ -290,7 +311,7 @@ export class InitialSchema1700000000000 implements MigrationInterface {
       }),
     );
 
-    await queryRunner.createTable(
+    await ensureTable(
       new Table({
         name: 'activity_logs',
         columns: [
@@ -313,20 +334,36 @@ export class InitialSchema1700000000000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.dropTable('activity_logs');
-    await queryRunner.dropTable('sessions');
-    await queryRunner.dropTable('payments');
-    await queryRunner.dropTable('claims');
-    await queryRunner.dropTable('appointments');
-    await queryRunner.dropTable('patients');
-    await queryRunner.dropTable('clinics');
-    await queryRunner.dropTable('admins');
+    const dropIfExists = async (table: string) => {
+      const exists = await queryRunner.hasTable(table);
+      if (exists) {
+        await queryRunner.dropTable(table);
+      }
+    };
 
-    await queryRunner.query('DROP TYPE "activity_action_enum"');
-    await queryRunner.query('DROP TYPE "user_type_enum"');
-    await queryRunner.query('DROP TYPE "payment_status_enum"');
-    await queryRunner.query('DROP TYPE "claim_status_enum"');
-    await queryRunner.query('DROP TYPE "eligibility_status_enum"');
-    await queryRunner.query('DROP TYPE "appointment_status_enum"');
+    const dropEnumIfExists = async (name: string) => {
+      const existing = await queryRunner.query(
+        `SELECT 1 FROM pg_type WHERE typname = '${name.replace(/'/g, "''")}'`,
+      );
+      if (existing.length) {
+        await queryRunner.query(`DROP TYPE "${name}"`);
+      }
+    };
+
+    await dropIfExists('activity_logs');
+    await dropIfExists('sessions');
+    await dropIfExists('payments');
+    await dropIfExists('claims');
+    await dropIfExists('appointments');
+    await dropIfExists('patients');
+    await dropIfExists('clinics');
+    await dropIfExists('admins');
+
+    await dropEnumIfExists('activity_action_enum');
+    await dropEnumIfExists('user_type_enum');
+    await dropEnumIfExists('payment_status_enum');
+    await dropEnumIfExists('claim_status_enum');
+    await dropEnumIfExists('eligibility_status_enum');
+    await dropEnumIfExists('appointment_status_enum');
   }
 }

@@ -76,6 +76,8 @@ cp .env.example .env
 
 > **PostgreSQL usage:** The application always boots with a PostgreSQL `DATABASE_URL` and never falls back to any other driver. Ensure the specified database exists and the user has privileges to create/update tables. Development defaults to `TYPEORM_SYNCHRONIZE=true`, while production relies on migrations and automatically runs them if `TYPEORM_RUN_MIGRATIONS_ON_START=true`. Tests expect a PostgreSQL database (default `opendental_test`) and drop the schema between runs.
 
+> **Idempotent migrations:** The initial migration checks for existing enums and tables before creating them, so pointing the service at a pre-provisioned database will not crash startup. Subsequent migrations should follow the same pattern when they need to tolerate partially provisioned environments.
+
 ## Local Development
 ```bash
 npm install
@@ -87,13 +89,15 @@ Swagger UI becomes available at `http://localhost:3000/api/docs`, and all REST e
 ```bash
 npm run build
 npm run start:prod   # runs migrations first (can be disabled with TYPEORM_RUN_MIGRATIONS_ON_START=false)
+npm run start:prod:pm2   # production-safe restart-on-crash runner (build + migrate + pm2 runtime)
 ```
 
 ## Database Management
 - Development uses TypeORM synchronize for speed; production defaults to migrations. Set `TYPEORM_SYNCHRONIZE=false` and `TYPEORM_RUN_MIGRATIONS_ON_START=true` for hardened environments.
 - Apply migrations manually when needed:
   - `npm run migration:run` (uses `src/data-source.ts` with TS runtime)
-  - `npm run migration:run:prod` (uses compiled `dist/data-source.js`, invoked automatically by `npm run start:prod`)
+- `npm run migration:run:prod` (uses compiled `dist/data-source.js`, invoked automatically by `npm run start:prod`)
+- `npm run start:prod:pm2` (wraps build + migrations in pm2 so the process auto-restarts on crash)
   - `npm run migration:generate -- --name <DescriptiveName>` to scaffold new migrations from entities
 - PostgreSQL schema includes UUID primary keys, timestamp auditing columns, and JSONB metadata for eligibility, claims, and activity logging.
 - Polling workflows and session state persist directly in PostgreSQL so that restarts or horizontal scaling do not drop in-flight context.
