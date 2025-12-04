@@ -5,19 +5,418 @@ This NestJS service orchestrates clinic onboarding, patient eligibility verifica
 ---
 
 ## Table of Contents
-1. [Architecture Overview](#architecture-overview)
-2. [Domain Model](#domain-model)
-3. [Prerequisites](#prerequisites)
-4. [Environment Configuration](#environment-configuration)
-5. [Local Development](#local-development)
-6. [Database Management](#database-management)
-7. [Testing](#testing)
-8. [OpenDental Integration](#opendental-integration)
-9. [Platform Flows](#platform-flows)
-10. [Frontend API Call Sequence](#frontend-api-call-sequence)
-11. [Background Polling](#background-polling)
-12. [Temporal Jobs](#temporal-jobs)
-13. [Extensibility Notes](#extensibility-notes)
+1. [System Diagrams](#system-diagrams)
+   - [High-Level System Architecture](#high-level-system-architecture)
+   - [Complete Entity Relationship Diagram (ERD)](#complete-entity-relationship-diagram-erd)
+   - [System Sequence Diagram - Complete Claim Workflow](#system-sequence-diagram---complete-claim-workflow)
+   - [System Flow Diagram - Data Synchronization](#system-flow-diagram---data-synchronization)
+2. [Architecture Overview](#architecture-overview)
+3. [Domain Model](#domain-model)
+4. [Prerequisites](#prerequisites)
+5. [Environment Configuration](#environment-configuration)
+6. [Local Development](#local-development)
+7. [Database Management](#database-management)
+8. [Testing](#testing)
+9. [OpenDental Integration](#opendental-integration)
+10. [Platform Flows](#platform-flows)
+11. [Frontend API Call Sequence](#frontend-api-call-sequence)
+12. [Background Polling](#background-polling)
+13. [Temporal Jobs](#temporal-jobs)
+14. [Extensibility Notes](#extensibility-notes)
+
+---
+
+## System Diagrams
+
+### High-Level System Architecture
+
+```mermaid
+graph TB
+    subgraph "Client Layer"
+        FE[Frontend Application]
+    end
+    
+    subgraph "API Gateway Layer"
+        API[NestJS REST API<br/>Port 3000<br/>Swagger Docs]
+    end
+    
+    subgraph "Authentication & Security"
+        AUTH[Auth Module<br/>JWT + Sessions]
+        GUARD[Guards & Interceptors]
+    end
+    
+    subgraph "Business Logic Layer"
+        ADMIN[Admins Module]
+        CLINIC[Clinics Module]
+        PATIENT[Patients Module]
+        APPT[Appointments Module]
+        CLAIM[Claims Module]
+        PAY[Payments Module]
+        ACTIVITY[Activity Log Module]
+        SESSION[Sessions Module]
+    end
+    
+    subgraph "Integration Layer"
+        OD[OpenDental Service<br/>REST API Client]
+        TEMP[Temporal Service<br/>Workflow Engine]
+    end
+    
+    subgraph "Background Jobs"
+        POLL[Polling Service<br/>Cron Schedulers]
+        LOCK[Distributed Lock Service<br/>PostgreSQL Advisory Locks]
+    end
+    
+    subgraph "Data Layer"
+        DB[(PostgreSQL Database<br/>TypeORM)]
+    end
+    
+    subgraph "External Systems"
+        ODAPI[OpenDental API<br/>api.opendental.com]
+        TEMPORAL[Temporal Server<br/>Optional]
+    end
+    
+    FE -->|HTTP/REST| API
+    API --> AUTH
+    AUTH --> GUARD
+    GUARD --> ADMIN & CLINIC & PATIENT & APPT & CLAIM & PAY & ACTIVITY & SESSION
+    
+    ADMIN & CLINIC & PATIENT & APPT & CLAIM & PAY & SESSION & ACTIVITY --> DB
+    
+    POLL --> LOCK
+    POLL --> OD
+    POLL --> PATIENT & APPT & CLAIM & PAY
+    
+    OD -->|HTTP| ODAPI
+    TEMP -->|gRPC| TEMPORAL
+    
+    CLAIM --> TEMP
+    POLL --> TEMP
+    
+    style API fill:#4A90E2
+    style DB fill:#50C878
+    style ODAPI fill:#FF6B6B
+    style POLL fill:#FFD93D
+```
+
+### Complete Entity Relationship Diagram (ERD)
+
+```mermaid
+erDiagram
+    ADMINS ||--o{ CLINICS : owns
+    ADMINS ||--o{ SESSIONS : has
+    CLINICS ||--o{ PATIENTS : manages
+    CLINICS ||--o{ APPOINTMENTS : schedules
+    CLINICS ||--o{ CLAIMS : processes
+    CLINICS ||--o{ PAYMENTS : receives
+    PATIENTS ||--o{ APPOINTMENTS : books
+    PATIENTS ||--o{ CLAIMS : files
+    APPOINTMENTS ||--|| CLAIMS : generates
+    CLAIMS ||--|| PAYMENTS : receives
+    
+    ADMINS {
+        uuid id PK
+        string email UK
+        string passwordHash
+        string fullName
+        enum role
+        timestamp createdAt
+        timestamp updatedAt
+    }
+    
+    CLINICS {
+        uuid id PK
+        uuid adminId FK
+        string name UK
+        string addressLine1
+        string addressLine2
+        string city
+        string state
+        string postalCode
+        string country
+        string contactEmail
+        string contactPhone
+        string timezone
+        string openDentalApiKey
+        string openDentalApiSecret
+        timestamp createdAt
+        timestamp updatedAt
+    }
+    
+    PATIENTS {
+        uuid id PK
+        uuid clinicId FK
+        string externalId UK
+        string firstName
+        string lastName
+        date birthDate
+        string email
+        string phoneNumber
+        timestamp createdAt
+        timestamp updatedAt
+    }
+    
+    APPOINTMENTS {
+        uuid id PK
+        uuid clinicId FK
+        uuid patientId FK
+        string externalAptId UK
+        timestamp scheduledStart
+        timestamp scheduledEnd
+        enum status
+        string reason
+        string notes
+        enum eligibilityStatus
+        json eligibilityDetails
+        decimal insuranceCoverageAmount
+        decimal patientResponsibilityAmount
+        decimal discountAmount
+        string operatory
+        string providerName
+        timestamp createdAt
+        timestamp updatedAt
+    }
+    
+    CLAIMS {
+        uuid id PK
+        uuid clinicId FK
+        uuid patientId FK
+        uuid appointmentId FK
+        string externalClaimId UK
+        enum status
+        decimal amountBilled
+        decimal amountApproved
+        string rejectionReason
+        string notes
+        json metadata
+        timestamp lastPolledAt
+        timestamp createdAt
+        timestamp updatedAt
+    }
+    
+    PAYMENTS {
+        uuid id PK
+        uuid clinicId FK
+        uuid claimId FK
+        decimal amount
+        enum status
+        string method
+        string externalPaymentId
+        timestamp receivedAt
+        json metadata
+        timestamp createdAt
+        timestamp updatedAt
+    }
+    
+    SESSIONS {
+        uuid id PK
+        uuid adminId FK
+        enum userType
+        string userId
+        string refreshTokenHash UK
+        timestamp expiresAt
+        string userAgent
+        string ipAddress
+        timestamp revokedAt
+        timestamp createdAt
+        timestamp updatedAt
+    }
+    
+    ACTIVITY_LOGS {
+        uuid id PK
+        enum userType
+        string userId
+        enum action
+        json metadata
+        string ipAddress
+        timestamp createdAt
+        timestamp updatedAt
+    }
+```
+
+### System Sequence Diagram - Complete Claim Workflow
+
+```mermaid
+sequenceDiagram
+    participant Admin
+    participant API as NestJS API
+    participant Auth as Auth Service
+    participant Clinic as Clinic Service
+    participant Poll as Polling Service
+    participant OD as OpenDental API
+    participant Appt as Appointment Service
+    participant Claim as Claim Service
+    participant Pay as Payment Service
+    participant Temp as Temporal Service
+    participant DB as PostgreSQL
+    
+    Note over Admin,DB: 1. Admin Onboarding & Authentication
+    Admin->>API: POST /auth/admin/register
+    API->>Auth: registerAdmin(dto)
+    Auth->>DB: Create admin record
+    DB-->>Auth: Admin created
+    Auth-->>API: Success
+    API-->>Admin: 201 Created
+    
+    Admin->>API: POST /auth/login
+    API->>Auth: login(credentials)
+    Auth->>DB: Verify credentials & create session
+    DB-->>Auth: Session created
+    Auth-->>API: {accessToken, refreshToken}
+    API-->>Admin: 200 OK with tokens
+    
+    Note over Admin,DB: 2. Clinic Onboarding
+    Admin->>API: POST /clinics (with OD credentials)
+    API->>Clinic: create(adminId, dto)
+    Clinic->>DB: Insert clinic with OD API keys
+    DB-->>Clinic: Clinic created
+    Clinic-->>API: Clinic entity
+    API-->>Admin: 201 Created
+    
+    Note over Poll,DB: 3. Background Polling - Appointments
+    Poll->>Poll: Cron trigger (every 15 min)
+    Poll->>DB: Get all clinics
+    DB-->>Poll: Clinic list
+    Poll->>OD: GET /appointments (upcoming)
+    OD-->>Poll: Appointment data
+    Poll->>Appt: upsert(appointmentDto)
+    Appt->>DB: Create/update appointment
+    DB-->>Appt: Saved
+    
+    Note over Poll,DB: 4. Eligibility Verification
+    Poll->>Poll: Cron trigger (every 30 min)
+    Poll->>DB: Get pending appointments
+    DB-->>Poll: Appointments list
+    Poll->>OD: GET /eligibility/{AptNum}
+    OD-->>Poll: Eligibility response
+    Poll->>Appt: updateEligibility(status, details)
+    Appt->>DB: Update eligibility status
+    DB-->>Appt: Updated
+    
+    Note over Admin,DB: 5. Claim Creation
+    Admin->>API: POST /claims
+    API->>Claim: upsert(claimDto)
+    Claim->>DB: Create claim (NOT_SUBMITTED)
+    DB-->>Claim: Claim created
+    Claim->>OD: POST /claims
+    OD-->>Claim: {ClaimNum}
+    Claim->>DB: Update with externalClaimId
+    DB-->>Claim: Updated
+    Claim->>Temp: enqueueJob(ClaimSubmissionWorkflow)
+    Temp-->>Claim: Job queued
+    Claim-->>API: Claim entity
+    API-->>Admin: 201 Created
+    
+    Note over Poll,DB: 6. Claim Status Polling
+    Poll->>Poll: Cron trigger (hourly)
+    Poll->>DB: Get non-PAID claims
+    DB-->>Poll: Claims list
+    Poll->>OD: GET /claims/{ClaimNum}
+    OD-->>Poll: Claim status
+    Poll->>Claim: update(status)
+    Claim->>DB: Update claim status
+    DB-->>Claim: Updated
+    Poll->>Temp: enqueueJob(ClaimStatusWorkflow)
+    Temp-->>Poll: Job queued
+    
+    Note over Poll,DB: 7. Payment Reconciliation
+    Poll->>Poll: Cron trigger (hourly at :15)
+    Poll->>DB: Get APPROVED claims
+    DB-->>Poll: Claims list
+    Poll->>OD: GET /claimpayments
+    OD-->>Poll: Payment data
+    Poll->>Pay: upsert(paymentDto)
+    Pay->>DB: Create payment (PAID)
+    DB-->>Pay: Payment created
+    Poll->>Claim: update(status=PAID)
+    Claim->>DB: Update claim to PAID
+    DB-->>Claim: Updated
+    
+    Note over Admin,DB: 8. Dashboard Query
+    Admin->>API: GET /claims?clinicId=xxx
+    API->>Claim: list(clinicId)
+    Claim->>DB: Query claims with relations
+    DB-->>Claim: Claims with appointments & patients
+    Claim-->>API: Claims list
+    API-->>Admin: 200 OK with data
+```
+
+### System Flow Diagram - Data Synchronization
+
+```mermaid
+flowchart TD
+    Start([Application Start]) --> Init[Initialize NestJS App]
+    Init --> DBConnect{Database<br/>Connected?}
+    DBConnect -->|No| Error[Log Error & Exit]
+    DBConnect -->|Yes| Migrate[Run Migrations<br/>if enabled]
+    Migrate --> StartCron[Start Cron Jobs]
+    
+    StartCron --> Poll1[Upcoming Appointments<br/>Every 15 min]
+    StartCron --> Poll2[Today's Appointments<br/>Every 5 min]
+    StartCron --> Poll3[Completed Appointments<br/>Every 10 min]
+    StartCron --> Poll4[Eligibility Check<br/>Every 30 min]
+    StartCron --> Poll5[Claim Status<br/>Every hour]
+    StartCron --> Poll6[Payment Posting<br/>Every hour at :15]
+    StartCron --> Poll7[System Heartbeat<br/>Daily]
+    
+    Poll1 --> Lock1{Acquire<br/>Lock?}
+    Lock1 -->|No| Skip1[Skip - Already Running]
+    Lock1 -->|Yes| Fetch1[Fetch from OpenDental]
+    Fetch1 --> Process1[Upsert Patients & Appointments]
+    Process1 --> Release1[Release Lock]
+    
+    Poll4 --> Lock4{Acquire<br/>Lock?}
+    Lock4 -->|No| Skip4[Skip - Already Running]
+    Lock4 -->|Yes| GetPending[Get Pending Appointments]
+    GetPending --> CheckElig[Check Eligibility via OD API]
+    CheckElig --> UpdateElig{Eligible?}
+    UpdateElig -->|Yes| SetApproved[Set Status: APPROVED]
+    UpdateElig -->|No| SetRejected[Set Status: REJECTED]
+    SetApproved --> Release4[Release Lock]
+    SetRejected --> Release4
+    
+    Poll5 --> Lock5{Acquire<br/>Lock?}
+    Lock5 -->|No| Skip5[Skip - Already Running]
+    Lock5 -->|Yes| GetClaims[Get Non-PAID Claims]
+    GetClaims --> FetchStatus[Fetch Status from OD]
+    FetchStatus --> UpdateStatus{Status?}
+    UpdateStatus -->|Received| SetSubmitted[Set: SUBMITTED]
+    UpdateStatus -->|Accepted| SetApproved2[Set: APPROVED]
+    UpdateStatus -->|Rejected| SetRejected2[Set: REJECTED]
+    SetSubmitted --> EnqueueJob[Enqueue Temporal Job]
+    SetApproved2 --> EnqueueJob
+    SetRejected2 --> EnqueueJob
+    EnqueueJob --> Release5[Release Lock]
+    
+    Poll6 --> Lock6{Acquire<br/>Lock?}
+    Lock6 -->|No| Skip6[Skip - Already Running]
+    Lock6 -->|Yes| GetApproved[Get APPROVED Claims]
+    GetApproved --> FetchPayment[Fetch Payment Data]
+    FetchPayment --> HasPayment{Payment<br/>Found?}
+    HasPayment -->|Yes| CreatePayment[Create Payment Record]
+    HasPayment -->|No| Release6[Release Lock]
+    CreatePayment --> MarkPaid[Mark Claim as PAID]
+    MarkPaid --> Release6
+    
+    subgraph "API Request Flow"
+        APIReq[Incoming API Request] --> AuthCheck{Authenticated?}
+        AuthCheck -->|No| Return401[Return 401 Unauthorized]
+        AuthCheck -->|Yes| ValidateDTO[Validate DTO]
+        ValidateDTO --> ValidDTO{Valid?}
+        ValidDTO -->|No| Return400[Return 400 Bad Request]
+        ValidDTO -->|Yes| BizLogic[Execute Business Logic]
+        BizLogic --> DBOp[Database Operation]
+        DBOp --> LogActivity[Log Activity]
+        LogActivity --> Return200[Return 200/201 Success]
+    end
+    
+    style Start fill:#90EE90
+    style Error fill:#FF6B6B
+    style DBConnect fill:#FFD93D
+    style Lock1 fill:#87CEEB
+    style Lock4 fill:#87CEEB
+    style Lock5 fill:#87CEEB
+    style Lock6 fill:#87CEEB
+```
 
 ---
 
