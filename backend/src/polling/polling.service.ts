@@ -20,6 +20,9 @@ import { Clinic } from '../clinics/clinic.entity';
 @Injectable()
 export class PollingService {
   private readonly logger = new Logger(PollingService.name);
+  private isOpenDentalConnected = false;
+  private lastConnectionCheck: Date | null = null;
+  private readonly CONNECTION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
   constructor(
     private readonly openDentalService: OpenDentalService,
@@ -31,7 +34,36 @@ export class PollingService {
     private readonly activityService: ActivityLogService,
     private readonly lockService: DistributedLockService,
     private readonly adminsService: AdminsService,
-  ) {}
+  ) { }
+
+  private async checkOpenDentalConnection(): Promise<boolean> {
+    const now = new Date();
+
+    // Check connection every 5 minutes
+    if (
+      this.lastConnectionCheck &&
+      now.getTime() - this.lastConnectionCheck.getTime() < this.CONNECTION_CHECK_INTERVAL_MS
+    ) {
+      return this.isOpenDentalConnected;
+    }
+
+    try {
+      const result = await this.openDentalService.testConnection();
+      this.isOpenDentalConnected = result.success;
+      this.lastConnectionCheck = now;
+
+      if (!this.isOpenDentalConnected) {
+        this.logger.warn('⚠️  OpenDental connection is not available. Polling jobs will be skipped.');
+      }
+
+      return this.isOpenDentalConnected;
+    } catch (error) {
+      this.logger.error('Failed to check OpenDental connection', error);
+      this.isOpenDentalConnected = false;
+      this.lastConnectionCheck = now;
+      return false;
+    }
+  }
 
   private async getClinicsGroupedByAdmins(): Promise<Clinic[]> {
     const admins = await this.adminsService.listWithClinics();
@@ -40,6 +72,11 @@ export class PollingService {
 
   @Cron('0 */15 * * * *')
   async syncUpcomingAppointments(): Promise<void> {
+    if (!(await this.checkOpenDentalConnection())) {
+      this.logger.debug('Skipping syncUpcomingAppointments - OpenDental not connected');
+      return;
+    }
+
     await this.lockService.withLock('polling:sync-upcoming-appointments', async () => {
       const clinics = await this.getClinicsGroupedByAdmins();
       for (const clinic of clinics) {
@@ -67,6 +104,11 @@ export class PollingService {
 
   @Cron('0 */5 * * * *')
   async syncTodaysAppointments(): Promise<void> {
+    if (!(await this.checkOpenDentalConnection())) {
+      this.logger.debug('Skipping syncTodaysAppointments - OpenDental not connected');
+      return;
+    }
+
     await this.lockService.withLock('polling:sync-todays-appointments', async () => {
       const clinics = await this.getClinicsGroupedByAdmins();
       for (const clinic of clinics) {
@@ -93,6 +135,11 @@ export class PollingService {
 
   @Cron('0 */10 * * * *')
   async syncCompletedAppointments(): Promise<void> {
+    if (!(await this.checkOpenDentalConnection())) {
+      this.logger.debug('Skipping syncCompletedAppointments - OpenDental not connected');
+      return;
+    }
+
     await this.lockService.withLock('polling:sync-completed-appointments', async () => {
       const clinics = await this.getClinicsGroupedByAdmins();
       for (const clinic of clinics) {
@@ -119,6 +166,11 @@ export class PollingService {
 
   @Cron('0 */30 * * * *')
   async syncEligibility(): Promise<void> {
+    if (!(await this.checkOpenDentalConnection())) {
+      this.logger.debug('Skipping syncEligibility - OpenDental not connected');
+      return;
+    }
+
     await this.lockService.withLock('polling:sync-eligibility', async () => {
       const clinics = await this.getClinicsGroupedByAdmins();
       for (const clinic of clinics) {
@@ -145,6 +197,11 @@ export class PollingService {
 
   @Cron('0 0 * * * *')
   async syncClaims(): Promise<void> {
+    if (!(await this.checkOpenDentalConnection())) {
+      this.logger.debug('Skipping syncClaims - OpenDental not connected');
+      return;
+    }
+
     await this.lockService.withLock('polling:sync-claims', async () => {
       const clinics = await this.getClinicsGroupedByAdmins();
       for (const clinic of clinics) {
@@ -176,6 +233,11 @@ export class PollingService {
 
   @Cron('0 15 * * * *')
   async syncPayments(): Promise<void> {
+    if (!(await this.checkOpenDentalConnection())) {
+      this.logger.debug('Skipping syncPayments - OpenDental not connected');
+      return;
+    }
+
     await this.lockService.withLock('polling:sync-payments', async () => {
       const clinics = await this.getClinicsGroupedByAdmins();
       for (const clinic of clinics) {

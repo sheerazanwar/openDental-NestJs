@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { ConfigService } from '@nestjs/config';
 import { OpenDentalAppointmentDto } from './dto/opendental-appointment.dto';
@@ -12,19 +12,36 @@ import { OpenDentalProcedureLogDto } from './dto/opendental-procedure-log.dto';
 import { OpenDentalPaymentDto } from './dto/opendental-payment.dto';
 
 @Injectable()
-export class OpenDentalService {
+export class OpenDentalService implements OnModuleInit {
   private readonly logger = new Logger(OpenDentalService.name);
   private readonly client: AxiosInstance;
 
   constructor(private readonly configService: ConfigService) {
+    const apiKey = this.configService.get<string>('openDental.apiKey');
     this.client = axios.create({
       baseURL: this.configService.get<string>('openDental.baseUrl'),
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': this.configService.get<string>('openDental.apiKey'),
+        'Authorization': `Bearer ${apiKey}`,
       },
       timeout: 15000,
     });
+
+    // Log the actual headers being sent
+    this.logger.log('📤 Request headers:');
+    this.logger.log(`   Content-Type: application/json`);
+    this.logger.log(`   Authorization: Bearer ${apiKey ? '********' : '(not set)'}`);
+  }
+
+  async onModuleInit() {
+    this.logger.log('='.repeat(60));
+    this.logger.log('🚀 OpenDental Module Initialized');
+    this.logger.log('='.repeat(60));
+
+    // Test connection on startup
+    await this.testConnection();
+
+    this.logger.log('='.repeat(60));
   }
 
   async fetchUpcomingAppointments(clinicExternalId: string): Promise<OpenDentalAppointmentDto[]> {
@@ -335,6 +352,99 @@ export class OpenDentalService {
     this.logger.debug(`Sending claim ${claimId} data to AI summarization placeholder`);
     await new Promise((resolve) => setTimeout(resolve, 200));
     return { status: 'ACKNOWLEDGED' };
+  }
+
+  /**
+   * Test OpenDental API connection
+   * Returns connection status and details
+   */
+  async testConnection(): Promise<{
+    success: boolean;
+    message: string;
+    baseUrl: string;
+    timestamp: string;
+    error?: string;
+  }> {
+    const baseUrl = this.configService.get<string>('openDental.baseUrl') ?? 'not configured';
+    const apiKey = this.configService.get<string>('openDental.apiKey');
+
+    try {
+      this.logger.log('🔍 Testing OpenDental API connection...');
+      this.logger.log('📋 Configuration loaded from .env:');
+      this.logger.log(`   📍 OPEN_DENTAL_BASE_URL: ${baseUrl}`);
+      this.logger.log(`   🔑 OPEN_DENTAL_API_KEY: ${apiKey || '(not set)'}`);
+      this.logger.log(`   🔑 API Key (masked): ${apiKey?.substring(0, 4)}...${apiKey?.substring(apiKey.length - 4)}`);
+      this.logger.log(`   📏 API Key Length: ${apiKey?.length || 0} characters`);
+
+      // Log the actual headers being sent
+      this.logger.log('📤 Request headers:');
+      this.logger.log(`   Content-Type: application/json`);
+      this.logger.log(`   Authorization: Bearer ${apiKey || '(not set)'}`);
+
+      // Try a simple endpoint that should work with valid credentials
+      const response = await this.client.get('/patients/Simple', {
+        params: { PatNum: '1' },
+        validateStatus: (status) => status < 500,
+      });
+
+      if (response.status === 401) {
+        this.logger.warn('⚠️  OpenDental API connection FAILED - Authentication error (401)');
+        this.logger.warn('💡 The API is rejecting the Authorization header');
+        this.logger.warn('💡 Please verify your OPEN_DENTAL_API_KEY is correct');
+        this.logger.warn(`📄 Response: ${response.data}`);
+        return {
+          success: false,
+          message: 'Authentication failed - Invalid API key or wrong authentication method',
+          baseUrl,
+          timestamp: new Date().toISOString(),
+          error: response.data || 'Unauthorized',
+        };
+      }
+
+      if (response.status === 404) {
+        this.logger.log('✅ OpenDental API connection SUCCESSFUL (authenticated, test resource not found)');
+        return {
+          success: true,
+          message: 'Connected successfully - API is reachable and authenticated',
+          baseUrl,
+          timestamp: new Date().toISOString(),
+        };
+      }
+
+      if (response.status >= 200 && response.status < 300) {
+        this.logger.log('✅ OpenDental API connection SUCCESSFUL');
+        return {
+          success: true,
+          message: 'Connected successfully',
+          baseUrl,
+          timestamp: new Date().toISOString(),
+        };
+      }
+
+      this.logger.warn(`⚠️  OpenDental API returned status ${response.status}`);
+      return {
+        success: false,
+        message: `Unexpected status code: ${response.status}`,
+        baseUrl,
+        timestamp: new Date().toISOString(),
+        error: JSON.stringify(response.data),
+      };
+    } catch (error: any) {
+      this.logger.error('❌ OpenDental API connection FAILED');
+      this.logger.error(`Error: ${error.message}`);
+
+      if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+        this.logger.error('🌐 Network error - Cannot reach OpenDental API server');
+      }
+
+      return {
+        success: false,
+        message: 'Connection failed',
+        baseUrl,
+        timestamp: new Date().toISOString(),
+        error: error.message,
+      };
+    }
   }
 
   private async safeGet<T>(url: string, fallback: T, config?: AxiosRequestConfig): Promise<T> {

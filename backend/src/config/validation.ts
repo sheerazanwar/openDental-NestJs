@@ -15,7 +15,7 @@ class EnvironmentVariables {
   PORT: number = 3000;
 
   @IsString()
-  DATABASE_URL: string = 'postgres://postgres:postgres@localhost:5432/opendental';
+  DATABASE_URL: string = 'postgres://cognidental_user:cognidental_password@a23eaece2932642cabdf64b079c5be31-513059508.us-east-1.elb.amazonaws.com:5432/cognidental_db';
 
   @IsOptional()
   @IsString()
